@@ -1,6 +1,6 @@
 " Vim plugin file
 " Maintainer:       Nikolai Weibull <now@bitwi.se>
-" Latest Revision:  2006-07-19
+" Latest Revision:  2007-10-24
 
 if exists('loaded_plugin_now_man')
   finish
@@ -10,10 +10,6 @@ let loaded_plugin_now_man = 1
 
 let s:cpo_save = &cpo
 set cpo&vim
-
-runtime lib/now.vim
-runtime lib/now/vim.vim
-runtime lib/now/vim/position.vim
 
 " disable maps in $VIMRUNTIME/ftplugin/man.vim (this should naturally not be
 " necessary!)
@@ -72,7 +68,7 @@ function! s:man_load(sect, page, ...)
     if exists('b:man_sect')
       let prev_sect = b:man_sect
       let prev_page = b:man_page
-      let prev_mark = g:NOW.Vim.Position.current()
+      let prev_mark = now#vim#mark#cursor()
     endif
   endif
 
