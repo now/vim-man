@@ -1,11 +1,6 @@
-" Vim plugin file
-" Maintainer:       Nikolai Weibull <now@bitwi.se>
-" Latest Revision:  2007-10-24
-
 if exists('loaded_plugin_now_man')
   finish
 endif
-
 let loaded_plugin_now_man = 1
 
 let s:cpo_save = &cpo
@@ -16,7 +11,7 @@ set cpo&vim
 let no_man_maps = 1
 
 map <Leader>K :call <SID>load_page(v:count)<CR>
-command! -nargs=* Man call s:man(<f-args>)
+command! -nargs=* -complete=customlist,s:man_completion Man call s:man(<f-args>)
 
 if !exists('g:now_man_man_cmd')
   let g:now_man_man_cmd = 'man'
@@ -34,10 +29,120 @@ if !exists('g:now_man_buffer_name')
   let g:now_man_buffer_name = 'Man: '
 endif
 
-augroup Man
-  execute 'au BufUnload'
+augroup plugin-now-man
+  autocmd!
+  execute 'autocmd BufUnload'
         \ escape(g:now_man_buffer_name, '\ ') . '* setlocal nobuflisted'
 augroup END
+
+function! s:globpath(paths, expr)
+  return split(globpath(join(a:paths, ','), a:expr), "\n")
+endfunction
+
+function! s:man_path_initialize()
+  if exists('s:man_path')
+    return
+  endif
+
+  if exists('g:now_man_path')
+    let s:man_path = g:now_man_path
+    return
+  endif
+
+  let man_path = split(substitute(system('manpath 2>/dev/null'), '\n$', "", ""), ':')
+  if len(man_path) > 0
+    let s:man_path = man_path
+  elseif exists('$MANPATH')
+    let s:man_path = split('$MANPATH')
+  else
+    let s:man_path = [
+          \ '/usr/man',
+          \ '/usr/pkg/man',
+          \ '/usr/pkg/catman',
+          \ '/usr/dt/man',
+          \ '/usr/dt/catman',
+          \ '/usr/share/man',
+          \ '/usr/share/catman',
+          \ '/usr/X11R6/man',
+          \ '/usr/X11R6/catman',
+          \ '/usr/local/man',
+          \ '/usr/local/catman',
+          \ '/opt/pkg/man',
+          \ '/opt/pkg/catman',
+          \ '/opt/dt/man',
+          \ '/opt/dt/catman',
+          \ '/opt/share/man',
+          \ '/opt/share/catman',
+          \ '/opt/X11R6/man',
+          \ '/opt/X11R6/catman',
+          \ '/opt/local/man',
+          \ '/opt/local/catman' ]
+  endif
+endfunction
+
+" TODO: Need to do shell quoting of s:mrd.
+" TODO: Bug in Vim?  We need to copy(s:man_path).
+function! s:mrd_update()
+  let lang = exists('$LANG') && len($LANG) > 0 ? $LANG : 'En_US.ASCII'
+  if exists('s:mrd_lang') && s:mrd_lang == lang
+    return
+  endif
+  let s:mrd_lang = lang
+
+  let s:mrd = join(filter(map(copy(s:man_path), 'substitute(v:val, "%L", lang, "") . "/mandb"'),
+        \                 'filereadable(v:val) || isdirectory(v:val)'),
+        \          ' ')
+endfunction
+
+function! s:man_completion(lead, line, cursor)
+  call s:man_path_initialize()
+  call s:mrd_update()
+  
+  let words = split(a:line, '\s\+')
+  let line_left = strpart(a:line, 0, a:cursor)
+  let current = len(split(line_left, '\s\+', 1))
+
+  let section = ""
+  if current > 2
+    let section = words[1]
+  elseif exists('$MANSECT')
+    let section = $MANSECT
+  endif
+  let brace_section = substitute(section, ':', ',', 'g')
+  if section != brace_section
+    let section = '{' . brace_section . '}'
+  endif
+
+  if section =~ '^\%(\d.\{-}\|1M\|[ln]\)$' || section =~ '^{.*,.*}$'
+    let dirs = s:globpath(s:man_path, '{sman,man,cat}' . section)
+    let awk = '$2 == "' . section . '" {print $1}'
+  else
+    let dirs = s:globpath(s:man_path, '{sman,man,cat}*')
+    let awk = '{print $1}'
+  endif
+
+  let pages = map(s:globpath(dirs, '*'), 'v:val[strridx(v:val, "/")+1:-1]')
+
+  if len(s:mrd) > 0
+    let mrd_pages = system('awk ' . awk . ' ' . s:mrd)
+    if v:shell_error == 0
+      call extend(pages, mrd_pages)
+    endif
+  endif
+
+  call map(pages, 'substitute(v:val, ''\.\%(\d.\{-}\|1M\|[ln]\)\%(\.\%(gz\|bz2\|Z\)\)\=$'', "", "")')
+
+  if current == 1
+    call map(dirs, 'substitute(substitute(v:val, ''^.*\%(man\|cat\)'', "", ""), "/$", "", "")')
+    let pages = extend(dirs, pages)
+  endif
+
+  call filter(pages, 'v:val =~ ''^' . now#regex#escape(a:lead) . '''')
+  if len(pages) == 1
+    return [pages[0] . ' ']
+  endif
+  return pages
+endfunction
 
 function! s:man(...)
   if a:0 >= 2
@@ -112,7 +217,7 @@ function! s:man_load(sect, page, ...)
   endif
 endfunction
 
-function s:man_buffer_init()
+function! s:man_buffer_init()
   noremap <buffer> <silent> <CR>            :call <SID>load_page()<CR>
   noremap <buffer> <silent> <C-]>           :call <SID>load_page()<CR>
   noremap <buffer> <silent> <C-T>           :call <SID>prev_page()<CR>
@@ -124,7 +229,7 @@ function s:man_buffer_init()
   noremap <buffer> <silent> H               :call <SID>help()<CR>
 endfunction
 
-function s:help()
+function! s:help()
   echohl Title
   echo '                   Man Browser Keys'
   echo 'Key           Opt. Key   Action'
@@ -138,7 +243,7 @@ function s:help()
   echo 'q                        Quit browser'
 endfunction
 
-function s:load_page(...)
+function! s:load_page(...)
   if a:0 != 0
     let sect = a:1
     let page = expand('<cword>')
@@ -161,10 +266,11 @@ function s:load_page(...)
   call s:man_load(sect, page)
 endfunction
 
-function s:prev_page()
+function! s:prev_page()
   if exists('b:prev_page')
     call s:man_load(b:prev_sect, b:prev_page, b:prev_mark)
   endif
 endfunction
 
 let &cpo = s:cpo_save
+unlet s:cpo_save
