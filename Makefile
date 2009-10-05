@@ -1,4 +1,4 @@
-VIMBALL = vim-man.vba
+VIMBALL = man.vba
 
 FILES = \
 	plugin/now/man.vim
