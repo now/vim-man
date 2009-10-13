@@ -192,8 +192,9 @@ function! s:man_load(sect, page, ...)
     endif
     let $MANPAGER = 'cat'
     let cmd = g:now_man_man_cmd . ' -P "/bin/cat" ' . g:now_man_sect_opt .
-          \ a:sect . ' ' . g:now_man_page_opt . a:page . ' | col -b'
+          \ a:sect . ' ' . g:now_man_page_opt . a:page
     execute 'silent 0read!' cmd
+    %s/.\b//ge
     let $MANPAGER = man_pager
     let $MANWIDTH = man_width
     setfiletype man
